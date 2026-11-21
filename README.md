@@ -124,3 +124,37 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+## Schema Decisions
+
+### 1. Normalization: Foreign Key Reference vs. Embedded Genre Information
+
+In our Library Management System, the `Book` model references the `Genre` model through a foreign key (`genreId`) rather than embedding the genre name or details directly inside each book record.
+
+Here is why this relational modeling decision was made:
+
+1. **Elimination of Data Redundancy (Single Source of Truth):**
+   - If genre names were stored as plain strings in each book record (e.g., `"Science Fiction"`), the same genre string would be duplicated across hundreds or thousands of books.
+   - With a normalized `Genre` table, each genre exists exactly once in the database with its own primary key (`id`).
+
+2. **Preventing Data Anomalies & Inconsistencies:**
+   - **Update Anomalies:** If the library decides to rename `"Sci-Fi"` to `"Science Fiction"`, with embedded data we would need to find and update every single book row. If any row is missed, data becomes inconsistent. With a foreign key reference, we update only one record in the `Genre` table, and all associated books instantly reflect the change.
+   - **Typo Prevention:** Plain strings allow typos (e.g., `"Sci-fi"`, `"Sci-Fi"`, `"Science Fiction"`), which breaks filtering and searching. A foreign key enforces referential integrity: a book cannot reference a genre ID that does not exist.
+
+3. **Database Performance and Indexing:**
+   - Foreign key integers (`genreId: Int`) require much less storage space and are significantly faster to index (`@@index([genreId])`) and compare in SQL queries than variable-length strings.
+
+---
+
+### 2. Relational Modeling (PostgreSQL / Prisma) vs. Document Database Modeling (MongoDB)
+
+| Aspect | Relational Modeling (PostgreSQL / Prisma) | Document Database Modeling (e.g., MongoDB) |
+| :--- | :--- | :--- |
+| **Data Structure** | Data is strictly divided into normalized tables with fixed schemas, primary keys, and foreign keys. | Data is stored in flexible, JSON-like documents (collections) without strict schemas. |
+| **Relationships** | Uses **Foreign Keys** and **Joins** (`@relation` in Prisma) to link records without duplicating data. | Frequently **embeds** sub-documents directly (e.g., an array of genres or reviews directly inside the book document). |
+| **Data Integrity** | Enforced at the database engine level via constraints, unique keys, and cascading rules. | Enforced primarily at the application level; documents can have varying shapes. |
+| **Updates** | Fast and atomic updates to a single row (e.g., updating a genre name updates it everywhere). | Updating an embedded field across thousands of documents requires updating every document individually. |
+| **Reads** | Requires `JOIN` operations (or Prisma `include`) to assemble related data across tables. | Extremely fast for read operations that need the entire document tree in one read without joins. |
+
+In a library catalog where genres, authors, and books have well-defined relationships and strict consistency requirements, relational modeling with PostgreSQL and Prisma provides strong consistency and integrity guarantees.
